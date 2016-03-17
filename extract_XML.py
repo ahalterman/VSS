@@ -117,6 +117,6 @@ if __name__ == "__main__":
     short_files = ln_files[0:100]
     pool_size = 12
     pool = Pool(pool_size)
-    #processed = [pool.apply_async(process_file(sf)) for sf in short_files]
-    processed = process_file_list(short_files)
+    processed = [pool.map(process_file, short_files)]
+    #processed = process_file_list(short_files)
     print len(processed)
