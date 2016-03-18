@@ -21,7 +21,8 @@ existential-level [XML] treatment."
      'publication_date': datetime.datetime(2015, 5, 18, 0, 0),
      'publication_date_raw': u'',
      'states': [],
-     'word_count': u''
+     'word_count': u'',
+     'id_type' : '',
     }
 ```
 

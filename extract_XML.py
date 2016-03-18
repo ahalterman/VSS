@@ -10,6 +10,9 @@ def parse_date(raw_date):
     return parsed_date
 
 def extract_xml(text):
+    if text[0:79] == '<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://wwww.w3.org/2005/Atom':
+        print "RSS junk"
+        return
     text = re.sub("</p>", " ", text)
     soup = BeautifulSoup(text)
     try:
@@ -20,18 +23,47 @@ def extract_xml(text):
     if 'PHOTO(S) ONLY' in classes:
         print "Photo only"
         return
+    if 'PHOTO(S) LAYOUT' in classes:
+        print "Photo only"
+        return
     news_source = doc.find("metadata").find("publicationname").text.strip()
     publication_date_raw = doc.find("metadata").find("datetext").text.strip()
     publication_date = parse_date(publication_date_raw)
-    article_body = doc.find("bodytext").text.strip()
-    article_title = doc.find("nitf:hl1").text.strip()
-    word_count = doc.find("wordcount").attrs['number']
+
+    try:
+        word_count = doc.find("wordcount").attrs['number']
+    except AttributeError:
+        word_count = "NA"
+
     position_section = ""
     try:
         position_section = doc.find("positionsection").text.strip()
     except AttributeError:
         position_section = ""
-    doc_id = doc.find("dc:identifier", {"identifierscheme":"DOC-ID"}).text
+
+    try:
+        article_title = doc.find("nitf:hl1").text.strip()
+    except AttributeError:
+        if position_section == "EDITORIAL":
+            article_title = position_section
+        else:
+            article_title = ""
+            print "No title found."
+    if article_title == u"READERS' SUNSHOTS":
+        print "B-Sun shots"
+        return # very specific Baltimore Sun problem
+    try:
+        doc_id = doc.find("dc:identifier", {"identifierscheme":"DOC-ID"}).text
+        id_type = "DOC-ID"
+    except AttributeError:
+        doc_id = doc.find("dc:identifier", {"identifierscheme":"PGUID"}).text
+        id_type = "PGUID"
+
+    try:
+        article_body = doc.find("bodytext").text.strip()
+    except AttributeError:
+        print "No body"
+        return
 
     cities = []
     states = []
@@ -57,10 +89,10 @@ def extract_xml(text):
         "cities" : cities,
         "states" : states,
         "countries" : countries,
-        "doc_id" : doc_id
+        "doc_id" : doc_id,
+        "id_type" : id_type
     }
     return output
-
 
 def get_file_list(root_dir):
     files = [] #Will have list of all the files parsed through
