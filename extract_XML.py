@@ -12,7 +12,14 @@ def parse_date(raw_date):
 def extract_xml(text):
     text = re.sub("</p>", " ", text)
     soup = BeautifulSoup(text)
-    doc = soup.contents[1]
+    try:
+        doc = soup.contents[1]
+    except IndexError:
+        doc = soup
+    classes = [i.text for i in doc.findAll("classname")]
+    if 'PHOTO(S) ONLY' in classes:
+        print "Photo only"
+        return
     news_source = doc.find("metadata").find("publicationname").text.strip()
     publication_date_raw = doc.find("metadata").find("datetext").text.strip()
     publication_date = parse_date(publication_date_raw)
@@ -20,7 +27,10 @@ def extract_xml(text):
     article_title = doc.find("nitf:hl1").text.strip()
     word_count = doc.find("wordcount").attrs['number']
     position_section = ""
-    position_section = doc.find("positionsection").text.strip()
+    try:
+        position_section = doc.find("positionsection").text.strip()
+    except AttributeError:
+        position_section = ""
     doc_id = doc.find("dc:identifier", {"identifierscheme":"DOC-ID"}).text
 
     cities = []
@@ -77,10 +87,12 @@ def process_file_list(files):
             processed.append(extract_xml(dd['xml']))
         except IndexError:
             print i,
+            print dd
             #print dd['filename']
             #print dd['xml']
         except AttributeError as e:
             print i,
+            print dd
             print e
             #print dd['filename']
             #print dd['xml']
@@ -111,6 +123,7 @@ def process_file(fi):
             #print dd['filename']
             #print dd['xml']
     return processed
+
 
 if __name__ == "__main__":
     ln_files = get_file_list("/phani_event_data")
