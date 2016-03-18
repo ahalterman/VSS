@@ -3,6 +3,12 @@ import re
 import dateutil.parser
 import os
 from multiprocessing import Pool
+import pika
+import json
+from bson import json_util
+
+
+RABBIT_QUEUE = "disk_process"
 
 def parse_date(raw_date):
     date_string = re.findall(r"(.+\d{4})", raw_date)
@@ -101,6 +107,31 @@ def get_file_list(root_dir):
             files.append(os.path.join(dname, fname))
     return files
 
+def setup_rabbitmq():
+    credentials = pika.PlainCredentials('guest', 'guest')
+    parameters = pika.ConnectionParameters('localhost', 5672, '/', credentials)
+    connection = pika.BlockingConnection(parameters)
+    channel = connection.channel()
+    channel.queue_declare(queue='disk_process', durable=True)
+    channel.confirm_delivery()
+
+def write_to_queue(doc, queue):
+    message = json.dumps(doc, default=json_util.default)
+    channel.basic_publish(exchange='',
+                      routing_key=queue,
+                      body=message,
+                      properties=pika.BasicProperties(
+                         delivery_mode = 2,
+            ))
+
+
+#def callback(ch, method, properties, body):
+#    print(" [x] Received %r" % body)
+#    print body
+#    print(" [x] Done")
+#    ch.basic_ack(delivery_tag = method.delivery_tag)
+
+
 # serial implementation
 def process_file_list(files):
     docs = []
@@ -116,7 +147,9 @@ def process_file_list(files):
     processed = []
     for i, dd in enumerate(docs):
         try:
-            processed.append(extract_xml(dd['xml']))
+            ex = extract_xml(dd['xml'])
+            if ex:
+                write_to_queue(ex, "disk_process")
         except IndexError:
             print i,
             print dd
@@ -128,7 +161,7 @@ def process_file_list(files):
             print e
             #print dd['filename']
             #print dd['xml']
-    return processed
+    #return processed
 
 # parallel implementation
 def process_file(fi):
@@ -144,7 +177,9 @@ def process_file(fi):
     processed = []
     for i, dd in enumerate(docs):
         try:
-            processed.append(extract_xml(dd['xml']))
+            ex = extract_xml(dd['xml'])
+            if ex:
+                write_to_queue(ex, "disk_process")
         except IndexError:
             print i,
             #print dd['filename']
@@ -154,14 +189,25 @@ def process_file(fi):
             print e
             #print dd['filename']
             #print dd['xml']
-    return processed
+    #return processed
 
 
 if __name__ == "__main__":
+    print "Setting up RabbitMQ..."
+    #setup_rabbitmq()
+    credentials = pika.PlainCredentials('guest', 'guest')
+    parameters = pika.ConnectionParameters('localhost', 5672, '/', credentials)
+    connection = pika.BlockingConnection(parameters)
+    channel = connection.channel()
+    channel.queue_declare(queue='disk_process', durable=True)
+    channel.confirm_delivery()
+    print "Traversing directory to get files..."
     ln_files = get_file_list("/phani_event_data")
     short_files = ln_files[0:100]
-    pool_size = 12
+    pool_size = 5
     pool = Pool(pool_size)
+    print "ETLing..."
     processed = [pool.map(process_file, short_files)]
     #processed = process_file_list(short_files)
-    print len(processed)
+    #print len(processed)
+    print "Complete"
