@@ -6,7 +6,12 @@ from multiprocessing import Pool
 import pika
 import json
 from bson import json_util
+from pymongo import MongoClient
+import datetime
 
+connection = MongoClient()
+db = connection.lexisnexis
+collection = db['disk_stories']
 
 RABBIT_QUEUE = "disk_process"
 
@@ -124,6 +129,26 @@ def write_to_queue(doc, queue):
                          delivery_mode = 2,
             ))
 
+def write_to_mongo(collection, doc):
+    lang = "english"
+    toInsert = {"news_source": doc['news_source'],
+                "article_title": doc['article_title'],
+                "publication_date_raw": doc['publication_date_raw'],
+                "date_added": datetime.datetime.utcnow(),
+                "article_body": doc['article_body'],
+                "stanford": 0,
+                "language": lang,
+                "doc_id" : doc['doc_id'],
+                # disk-specific fields follow
+                'position_section' : doc['position_section'],
+                'cities' : doc['cities'],
+                'countries' : doc['countries'],
+                'states' : doc['states'],
+                'word_count' : doc['word_count'],
+                'id_type' : doc['id_type']
+                }
+    object_id = collection.insert(toInsert)
+    return object_id
 
 #def callback(ch, method, properties, body):
 #    print(" [x] Received %r" % body)
@@ -179,7 +204,11 @@ def process_file(fi):
         try:
             ex = extract_xml(dd['xml'])
             if ex:
-                write_to_queue(ex, "disk_process")
+                try:
+                    #write_to_queue(ex, "disk_process")
+                    write_to_mongo(collection, ex)
+                except Exception as e:
+                    print "Mongo error: {0}".format(e)
         except IndexError:
             print i,
             #print dd['filename']
