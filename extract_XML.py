@@ -11,7 +11,7 @@ import datetime
 
 connection = MongoClient()
 db = connection.lexisnexis
-collection = db['disk_stories']
+collection = db['disk_stories_full']
 
 RABBIT_QUEUE = "disk_process"
 
@@ -22,22 +22,32 @@ def parse_date(raw_date):
 
 def extract_xml(text):
     if text[0:79] == '<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://wwww.w3.org/2005/Atom':
-        print "RSS junk"
+        #print "RSS junk"
         return
-    text = re.sub("</p>", " ", text)
-    soup = BeautifulSoup(text)
+    try:
+        text = re.sub("</p>", " ", text)
+        soup = BeautifulSoup(text)
+    except Exception as e:
+        print "Error in BS conversion: ",
+        print e
+        print text
     try:
         doc = soup.contents[1]
     except IndexError:
         doc = soup
     classes = [i.text for i in doc.findAll("classname")]
     if 'PHOTO(S) ONLY' in classes:
-        print "Photo only"
+        #print "Photo only"
         return
     if 'PHOTO(S) LAYOUT' in classes:
-        print "Photo only"
+        #print "Photo only"
         return
-    news_source = doc.find("metadata").find("publicationname").text.strip()
+    try:
+        news_source = doc.find("metadata").find("publicationname").text.strip()
+    except Exception as e:
+        print "Problem getting news source",
+        print e
+        news_source = ""
     publication_date_raw = doc.find("metadata").find("datetext").text.strip()
     publication_date = parse_date(publication_date_raw)
 
@@ -61,19 +71,24 @@ def extract_xml(text):
             article_title = ""
             print "No title found."
     if article_title == u"READERS' SUNSHOTS":
-        print "B-Sun shots"
+        #print "B-Sun shots"
         return # very specific Baltimore Sun problem
     try:
         doc_id = doc.find("dc:identifier", {"identifierscheme":"DOC-ID"}).text
         id_type = "DOC-ID"
     except AttributeError:
-        doc_id = doc.find("dc:identifier", {"identifierscheme":"PGUID"}).text
-        id_type = "PGUID"
+        try:
+            doc_id = doc.find("dc:identifier", {"identifierscheme":"PGUID"}).text
+            id_type = "PGUID"
+        except Exception as e:
+            print "Some other error in getting doc_id ",
+            print e
+            id_type = "NA"
 
     try:
         article_body = doc.find("bodytext").text.strip()
     except AttributeError:
-        print "No body"
+        #print "No body"
         return
 
     cities = []
@@ -199,7 +214,7 @@ def process_file(fi):
                      "xml" : row}
                 docs.append(d)
 
-    processed = []
+    #processed = []
     for i, dd in enumerate(docs):
         try:
             ex = extract_xml(dd['xml'])
@@ -216,24 +231,25 @@ def process_file(fi):
         except AttributeError as e:
             print i,
             print e
-            #print dd['filename']
-            #print dd['xml']
-    #return processed
+	except Exception as e:
+            print "Some other error in extracting XML: ",
+            print e
 
 
 if __name__ == "__main__":
     print "Setting up RabbitMQ..."
     #setup_rabbitmq()
-    credentials = pika.PlainCredentials('guest', 'guest')
-    parameters = pika.ConnectionParameters('localhost', 5672, '/', credentials)
-    connection = pika.BlockingConnection(parameters)
-    channel = connection.channel()
-    channel.queue_declare(queue='disk_process', durable=True)
-    channel.confirm_delivery()
+    #credentials = pika.PlainCredentials('guest', 'guest')
+    #parameters = pika.ConnectionParameters('localhost', 5672, '/', credentials)
+    #connection = pika.BlockingConnection(parameters)
+    #channel = connection.channel()
+    #channel.queue_declare(queue='disk_process', durable=True)
+    #channel.confirm_delivery()
     print "Traversing directory to get files..."
     ln_files = get_file_list("/phani_event_data")
-    short_files = ln_files[0:100]
-    pool_size = 5
+    print "Extracting documents from {0} documents".format(len(ln_files))
+    short_files = ln_files #[0:100]
+    pool_size = 14 
     pool = Pool(pool_size)
     print "ETLing..."
     processed = [pool.map(process_file, short_files)]
