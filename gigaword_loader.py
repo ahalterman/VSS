@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 from __future__ import print_function
 from bs4 import BeautifulSoup
 import re
@@ -9,12 +10,18 @@ import json
 from bson import json_util
 from pymongo import MongoClient
 import datetime
-
 import logging
 import sys
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
+
+import argparse
+parser = argparse.ArgumentParser("Traverse directories finding Gigaword files. Load into MongoDB")
+parser.add_argument("--dir", help="path to Gigaword files for import", required = True)
+args = parser.parse_args()
+DIRECTORY = args.dir
+print(DIRECTORY)
 
 ch = logging.StreamHandler(sys.stdout)
 ch.setLevel(logging.INFO)
@@ -35,6 +42,11 @@ def extract_xml(doc):
         #print("No article body for {}".format(doc_id))
         article_body = ""
     word_count = len(article_body.split())
+    try:
+        article_title = doc.find("headline").text.strip()
+    except AttributeError:
+        logger.warning("No headline for {}".format(doc_id))
+        article_title = ""
     language = re.findall("_([A-Z]{3})_", doc_id)[0]
     news_source = re.findall("^([A-Z]{3})_", doc_id)[0]
     date_string = re.findall("_(\d{8})", doc_id)[0]
@@ -42,8 +54,8 @@ def extract_xml(doc):
     try:
         doc_type = doc['type']
     except Exception as e:
-        #logger.info("Error getting story_type: {}".format(e))
-        print("Error getting story_type: {}".format(e))
+        logger.info("Error getting story_type: {}".format(e))
+        #print("Error getting story_type: {}".format(e))
         doc_type = ""
     try:
         dateline = doc.find("dateline").text.strip()
@@ -52,16 +64,16 @@ def extract_xml(doc):
         #logger.info("No dateline for doc {}".format(doc_id))
         #print("No dateline for doc {}".format(doc_id))
     doc_dict = {
-        'article_title' : doc.find("headline").text.strip(),
+        'article_title' : article_title,
         'dateline' : dateline,
         'article_body' : article_body,
         'doc_id' : doc_id,
         'publication_date' : parsed_date,
         'news_source' : news_source,
         'language' : language,
-        'doc_type' : doc_type
+        'doc_type' : doc_type,
+        'word_count' : word_count
         }
-    sys.stdout.flush()
     return doc_dict
 
 def get_file_list(root_dir):
@@ -72,10 +84,9 @@ def get_file_list(root_dir):
     return files
 
 def write_to_mongo(collection, doc):
-    lang = "english"
     toInsert = {"news_source": doc['news_source'],
                 "article_title": doc['article_title'],
-                #"publication_date_raw": doc['publication_date_raw'],
+                "publication_date": doc['publication_date'],
                 "date_added": datetime.datetime.utcnow(),
                 "article_body": doc['article_body'],
                 "stanford": 0,
@@ -100,22 +111,21 @@ def process_file(fi):
             ex = extract_xml(dd)
             if ex:
                 try:
-                    pass
                     #logger.debug(ex['article_title'])
-                    #write_to_mongo(collection, ex)
+                    write_to_mongo(collection, ex)
                 except Exception as e:
-                    #logger.error("Mongo error: {0}".format(e))
-                    print("Mongo error: {0}".format(e))
+                    logger.error("Mongo error: {0}".format(e), exc_info=True)
+                    #print("Mongo error: {0}".format(e))
             else:
                 logger.error("No extracted xml")
                 #print("No extracted xml")
         except IndexError as e:
-            logger.error(e, exc_info=True)
+            logger.error("Problem (Index) extracting XML: {}".format(e), exc_info=True)
             #print(e, exc_info=True)
             #print dd['filename']
             #print dd['xml']
         except AttributeError as e:
-            logger.error(e, exc_info=True)
+            logger.error("Problem (Attribute) extracting XML: {}".format(e), exc_info=True)
             #print(e, exc_info=True)
         except Exception as e:
             logger.error("Some other error in extracting XML: ".format(e), exc_info=True)
@@ -125,9 +135,10 @@ def process_file(fi):
 
 if __name__ == "__main__":
     print("Traversing directory to get files...")
-    ln_files = get_file_list("ltw_eng/")
+#    DIRECTORY = parser.parse_args()
+    ln_files = get_file_list(DIRECTORY)
     print("Found {0} documents".format(len(ln_files)))
-    short_files = ln_files[0:20] #[0:100]
+    short_files = ln_files #[0:20] #[0:100]
     print("Extracting documents from {0} documents".format(len(short_files)))
     #pool_size = 4
     #print("Using {} workers".format(pool_size))
