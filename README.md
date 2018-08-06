@@ -27,6 +27,7 @@ existential-level [XML] treatment."
     }
 ```
 
+
 - `gigaword_loader.py` traverses a directory of LDC Gigaword documents in XML,
   transforms them, and loads them into a Mongo database. It takes as an
   argument the gigaword directory's path. The resulting documents look like this:
@@ -48,3 +49,9 @@ Note: Python's built-in tools for logging and for multiprocessing don't work
 well together. I've defaulted to better logging because that saved more time in
 debugging than multiprocessing added, but all of the code for multiprocessing
 is built in and commented out. Switching to multiprocessing wouldn't be hard.
+
+## Note
+
+The customer service I experienced from LexisNexis was terrible: rude, slow,
+and technically uninformed. I'd strongly consider other providers if they're
+available.

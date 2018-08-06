@@ -231,7 +231,7 @@ def process_file(fi):
         except AttributeError as e:
             print i,
             print e
-	except Exception as e:
+    except Exception as e:
             print "Some other error in extracting XML: ",
             print e
 
